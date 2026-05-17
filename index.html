@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RRG Analyzer - Relative Rotation Graph</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.plot.ly/plotly-2.28.0.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+        body { font-family: 'Inter', system_ui, sans-serif; }
+        .quadrant-label { font-size: 14px; font-weight: 600; opacity: 0.75; }
+    </style>
+</head>
+<body class="bg-zinc-950 text-zinc-100">
+    <div class="max-w-7xl mx-auto p-6">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-4xl font-bold tracking-tighter">RRG ANALYZER</h1>
+                <p class="text-emerald-400 text-sm">Relative Rotation Graph • SPY Benchmark</p>
+            </div>
+            <div class="flex items-center gap-4">
+                <button onclick="calculateNow()" 
+                        class="px-8 py-3 bg-emerald-500 hover:bg-emerald-600 transition-colors rounded-2xl font-semibold flex items-center gap-2">
+                    <span>CALCULAR AHORA</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7-7 7" />
+                    </svg>
+                </button>
+                <div class="text-xs text-zinc-400 text-right">
+                    <div id="last-run" class="font-mono"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 mb-8">
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+                <!-- 8 Tickers -->
+                <div class="md:col-span-8">
+                    <label class="block text-sm text-zinc-400 mb-3">8 TICKERS (separados por coma)</label>
+                    <div class="grid grid-cols-4 gap-3" id="ticker-inputs">
+                        <!-- JS populated -->
+                    </div>
+                </div>
+
+                <!-- Mode -->
+                <div class="md:col-span-4">
+                    <label class="block text-sm text-zinc-400 mb-3">HISTORIAL</label>
+                    <div class="flex bg-zinc-800 rounded-2xl p-1 text-sm">
+                        <button onclick="setMode('days')" id="btn-days"
+                                class="flex-1 py-3 rounded-[14px] font-medium data-[active=true]:bg-zinc-900">10 DÍAS</button>
+                        <button onclick="setMode('weeks')" id="btn-weeks"
+                                class="flex-1 py-3 rounded-[14px] font-medium data-[active=true]:bg-zinc-900">10 SEMANAS</button>
+                    </div>
+                    <div class="mt-6 flex items-center gap-2 text-xs">
+                        <input type="checkbox" id="auto-mode" checked class="accent-emerald-500">
+                        <label for="auto-mode" class="text-zinc-400">Ejecutar automáticamente (13:00 y 19:00 hs AR)</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="flex border-b border-zinc-800 mb-6">
+            <button onclick="showTab(0)" id="tab-0"
+                    class="tab-button px-8 py-4 font-semibold border-b-2 border-emerald-500 text-emerald-400">GRÁFICO RRG</button>
+            <button onclick="showTab(1)" id="tab-1"
+                    class="tab-button px-8 py-4 font-semibold text-zinc-400 hover:text-zinc-200">CATEGORÍAS</button>
+            <button onclick="showTab(2)" id="tab-2"
+                    class="tab-button px-8 py-4 font-semibold text-zinc-400 hover:text-zinc-200">ANÁLISIS FUNDAMENTAL</button>
+        </div>
+
+        <!-- Tab 0: Gráfico -->
+        <div id="content-0">
+            <div id="rrg-container" class="bg-zinc-900 border border-zinc-800 rounded-3xl p-4 aspect-video relative">
+                <div id="plot"></div>
+                <div class="absolute top-6 right-6 text-xs font-mono bg-black/70 px-3 py-1 rounded-2xl" id="timestamp-display"></div>
+                <div class="absolute bottom-6 left-6 flex gap-6 text-xs">
+                    <button onclick="downloadChart()" 
+                            class="flex items-center gap-2 bg-white/10 hover:bg-white/20 px-4 py-2 rounded-2xl transition-colors">
+                        <span>⬇️ Descargar PNG</span>
+                    </button>
+                    <button onclick="shareChart()" 
+                            class="flex items-center gap-2 bg-white/10 hover:bg-white/20 px-4 py-2 rounded-2xl transition-colors">
+                        <span>🔗 Compartir enlace</span>
+                    </button>
+                </div>
+            </div>
+            <p class="text-center text-[10px] text-zinc-500 mt-3 font-mono">Centro = SPY • Proyección Monte Carlo + Hurst (3 ruedas)</p>
+        </div>
+
+        <!-- Tab 1: Categorías -->
+        <div id="content-1" class="hidden">
+            <div class="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden">
+                <table class="w-full" id="category-table">
+                    <thead>
+                        <tr class="border-b border-zinc-800">
+                            <th class="text-left py-5 px-8 text-sm font-medium text-zinc-400">TICKER</th>
+                            <th class="text-left py-5 px-8 text-sm font-medium text-zinc-400">CATEGORÍA</th>
+                            <th class="text-left py-5 px-8 text-sm font-medium text-zinc-400">TRAYECTORIA</th>
+                            <th class="text-right py-5 px-8 text-sm font-medium text-zinc-400">PRECIO OBJETIVO</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-zinc-800 text-sm"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Tab 2: Fundamental -->
+        <div id="content-2" class="hidden">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4" id="fundamental-grid">
+                <!-- JS populated -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==================== CONFIG ====================
+        let CURRENT_MODE = 'days'; // days o weeks
+        let TICKERS = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 'BRK-B'];
+        let LAST_RESULT = null;
+        const BENCHMARK = 'SPY';
+
+        // ==================== TAILWIND INIT ====================
+        function initTailwind() {
+            tailwind.config = {
+                content: ["./**/*.{html,js}"],
+                theme: { extend: {} }
+            };
+        }
+
+        // ==================== INPUTS TICKERS ====================
+        function createTickerInputs() {
+            const container = document.getElementById('ticker-inputs');
+            container.innerHTML = '';
+            for (let i = 0; i < 8; i++) {
+                const div = document.createElement('div');
+                div.className = 'relative';
+                div.innerHTML = `
+                    <input type="text" id="ticker-${i}" 
+                           value="${TICKERS[i] || ''}"
+                           onchange="updateTickers()"
+                           class="w-full bg-zinc-800 border border-zinc-700 focus:border-emerald-500 rounded-2xl px-4 py-3 text-center font-mono uppercase text-lg">
+                `;
+                container.appendChild(div);
+            }
+        }
+
+        function updateTickers() {
+            TICKERS = [];
+            for (let i = 0; i < 8; i++) {
+                const val = document.getElementById(`ticker-${i}`).value.trim().toUpperCase();
+                if (val) TICKERS.push(val);
+            }
+            while (TICKERS.length < 8) TICKERS.push('');
+        }
+
+        // ==================== MODE ====================
+        function setMode(mode) {
+            CURRENT_MODE = mode;
+            document.getElementById('btn-days').dataset.active = mode === 'days';
+            document.getElementById('btn-weeks').dataset.active = mode === 'weeks';
+        }
+
+        // ==================== NETLIFY FUNCTION CALL ====================
+        async function callCalculateRRG() {
+            const url = '/.netlify/functions/calculate-rrg';
+            const body = {
+                tickers: TICKERS.filter(t => t),
+                days: 10,
+                mode: CURRENT_MODE
+            };
+
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+
+            if (!res.ok) throw new Error('Error en cálculo');
+            return await res.json();
+        }
+
+        // ==================== CALCULAR AHORA ====================
+        async function calculateNow() {
+            const btn = document.querySelector('button[onclick="calculateNow()"]');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = `CALCULANDO<span class="animate-pulse">...</span>`;
+            btn.disabled = true;
+
+            try {
+                const data = await callCalculateRRG();
+                LAST_RESULT = data;
+                renderAll(data);
+                document.getElementById('last-run').innerHTML = `
+                    ÚLTIMA EJECUCIÓN<br>
+                    <span class="text-emerald-400">${data.timestamp}</span>
+                `;
+            } catch (e) {
+                alert('Error al calcular: ' + e.message);
+                console.error(e);
+            }
+
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
+
+        // ==================== RENDER TODO ====================
+        function renderAll(data) {
+            renderRRG(data);
+            renderCategoryTable(data);
+            renderFundamentals(data);
+            document.getElementById('timestamp-display').textContent = data.timestamp;
+        }
+
+        // ==================== RRG CHART (PLOTLY) ====================
+        function renderRRG(data) {
+            const container = document.getElementById('plot');
+            container.innerHTML = '';
+
+            const traces = [];
+            const annotations = [];
+
+            Object.keys(data.results).forEach((ticker, idx) => {
+                const r = data.results[ticker];
+                const x = r.rsRatio;
+                const y = r.rsMomentum;
+                const dates = r.dates;
+
+                // Trail
+                traces.push({
+                    x: x,
+                    y: y,
+                    mode: 'lines+markers',
+                    name: ticker,
+                    line: { color: `hsl(${idx * 45}, 90%, 65%)`, width: 2.5 },
+                    marker: { size: 4, symbol: 'circle' }
+                });
+
+                // Punto más reciente + etiqueta
+                const lastX = x[x.length - 1];
+                const lastY = y[y.length - 1];
+                traces.push({
+                    x: [lastX],
+                    y: [lastY],
+                    mode: 'markers+text',
+                    name: ticker + ' (latest)',
+                    marker: { size: 16, color: `hsl(${idx * 45}, 90%, 65%)`, line: { color: '#fff', width: 3 } },
+                    text: [`${ticker}<br>OBJ: ${data.targets[ticker]}`],
+                    textposition: 'top right',
+                    textfont: { size: 13, color: '#fff' }
+                });
+
+                // Proyección Monte Carlo (línea blanca discontinua)
+                const proj = data.projections[ticker];
+                if (proj && proj.length > 1) {
+                    traces.push({
+                        x: [lastX, ...proj.x],
+                        y: [lastY, ...proj.y],
+                        mode: 'lines',
+                        line: { color: '#ffffff', width: 2, dash: 'dash' },
+                        name: ticker + ' (proy)',
+                        showlegend: false
+                    });
+                }
+            });
+
+            // Cuadrantes
+            const layout = {
+                title: { text: 'RELATIVE ROTATION GRAPH', font: { size: 18 } },
+                xaxis: {
+                    title: 'RS-RATIO',
+                    range: [60, 140],
+                    zeroline: true,
+                    zerolinecolor: '#666',
+                    gridcolor: '#333'
+                },
+                yaxis: {
+                    title: 'RS-MOMENTUM',
+                    range: [60, 140],
+                    zeroline: true,
+                    zerolinecolor: '#666',
+                    gridcolor: '#333'
+                },
+                plot_bgcolor: '#18181b',
+                paper_bgcolor: '#18181b',
+                font: { color: '#ddd' },
+                showlegend: true,
+                legend: { orientation: 'h', y: -0.15 },
+                annotations: [
+                    { x: 120, y: 120, text: 'LEADING', showarrow: false, font: { size: 18, color: '#10b981' } },
+                    { x: 120, y: 80, text: 'WEAKENING', showarrow: false, font: { size: 18, color: '#f59e0b' } },
+                    { x: 80, y: 80, text: 'LAGGING', showarrow: false, font: { size: 18, color: '#ef4444' } },
+                    { x: 80, y: 120, text: 'IMPROVING', showarrow: false, font: { size: 18, color: '#3b82f6' } }
+                ]
+            };
+
+            Plotly.newPlot(container, traces, layout, { responsive: true });
+        }
+
+        // ==================== TABLA CATEGORÍAS ====================
+        function renderCategoryTable(data) {
+            const tbody = document.querySelector('#category-table tbody');
+            tbody.innerHTML = '';
+
+            data.categories.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="py-5 px-8 font-mono font-semibold">${item.ticker}</td>
+                    <td class="py-5 px-8">
+                        <span class="inline-block px-4 py-1 rounded-3xl text-xs font-bold
+                            ${item.category === 'CONSERVADORA' ? 'bg-emerald-500 text-white' : ''}
+                            ${item.category === 'AGRESIVA' ? 'bg-blue-500 text-white' : ''}
+                            ${item.category === 'SALIDA' ? 'bg-orange-500 text-white' : ''}
+                            ${item.category === 'NEUTRA' ? 'bg-zinc-600 text-white' : ''}">
+                            ${item.category}
+                        </span>
+                    </td>
+                    <td class="py-5 px-8 text-zinc-400">${item.trayectoria || '—'}</td>
+                    <td class="py-5 px-8 text-right font-mono">${data.targets[item.ticker]}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // ==================== FUNDAMENTAL ====================
+        function renderFundamentals(data) {
+            const grid = document.getElementById('fundamental-grid');
+            grid.innerHTML = '';
+
+            Object.keys(data.fundamentals).forEach(ticker => {
+                const f = data.fundamentals[ticker];
+                const card = document.createElement('div');
+                card.className = 'bg-zinc-900 border border-zinc-800 rounded-3xl p-6';
+                card.innerHTML = `
+                    <div class="flex justify-between items-baseline">
+                        <div class="font-mono text-2xl">${ticker}</div>
+                        <div class="text-emerald-400">${f.price || '—'}</div>
+                    </div>
+                    <div class="mt-6 space-y-4 text-sm">
+                        <div class="flex justify-between"><span class="text-zinc-400">P/E</span><span>${f.pe || '—'}</span></div>
+                        <div class="flex justify-between"><span class="text-zinc-400">EPS</span><span>${f.eps || '—'}</span></div>
+                        <div class="flex justify-between"><span class="text-zinc-400">Market Cap</span><span>${f.marketCap || '—'}</span></div>
+                        <div class="flex justify-between"><span class="text-zinc-400">Revenue</span><span>${f.revenue || '—'}</span></div>
+                        <div class="flex justify-between"><span class="text-zinc-400">Target Price</span><span class="font-semibold">${data.targets[ticker]}</span></div>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        // ==================== TABS ====================
+        function showTab(n) {
+            document.querySelectorAll('.tab-button').forEach((b, i) => {
+                b.classList.toggle('border-emerald-500', i === n);
+                b.classList.toggle('text-emerald-400', i === n);
+                b.classList.toggle('text-zinc-400', i !== n);
+            });
+            for (let i = 0; i < 3; i++) {
+                document.getElementById(`content-${i}`).classList.toggle('hidden', i !== n);
+            }
+        }
+
+        // ==================== DOWNLOAD / SHARE ====================
+        async function downloadChart() {
+            if (!LAST_RESULT) return alert('Primero calcula el gráfico');
+            const plot = document.getElementById('plot');
+            Plotly.downloadImage(plot, { format: 'png', width: 1200, height: 700, filename: `RRG_${new Date().toISOString().slice(0,10)}` });
+        }
+
+        async function shareChart() {
+            if (!LAST_RESULT) return alert('Primero calcula el gráfico');
+            const url = window.location.href + '?share=' + Date.now();
+            await navigator.clipboard.writeText(url);
+            alert('✅ Enlace copiado al portapapeles\n(Puedes pegar en WhatsApp o Telegram)');
+        }
+
+        // ==================== AUTO-RUN (simulado en frontend + Netlify) ====================
+        function simulateAutoRun() {
+            // En producción Netlify ejecuta el scheduled function
+            console.log('%c⏰ Auto-run programado para 13:00 y 19:00 hs AR (Netlify Scheduled)', 'color:#10b981; font-family:monospace');
+        }
+
+        // ==================== INIT ====================
+        async function init() {
+            initTailwind();
+            createTickerInputs();
+            setMode('days');
+
+            // Carga inicial automática
+            try {
+                const data = await callCalculateRRG();
+                LAST_RESULT = data;
+                renderAll(data);
+                document.getElementById('last-run').innerHTML = `
+                    ÚLTIMA EJECUCIÓN<br>
+                    <span class="text-emerald-400">${data.timestamp}</span>
+                `;
+            } catch (e) {
+                console.log('Primera carga: presiona CALCULAR AHORA');
+            }
+
+            simulateAutoRun();
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
