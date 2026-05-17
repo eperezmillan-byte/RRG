@@ -166,46 +166,53 @@
 
         // ==================== NETLIFY FUNCTION CALL ====================
         async function callCalculateRRG() {
-            const url = '/.netlify/functions/calculate-rrg';
-            const body = {
-                tickers: TICKERS.filter(t => t),
-                days: 10,
-                mode: CURRENT_MODE
-            };
+  const url = '/.netlify/functions/calculate-rrg';
+  const body = {
+    tickers: TICKERS.filter(t => t),
+    days: 10,
+    mode: CURRENT_MODE
+  };
 
-            const res = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
-            });
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
 
-            if (!res.ok) throw new Error('Error en cálculo');
-            return await res.json();
-        }
+  if (!res.ok) {
+    let errorText = '';
+    try {
+      errorText = await res.text();
+    } catch(e) {}
+    console.error('🔴 Server error:', res.status, errorText);
+    throw new Error(`Error ${res.status} - ${errorText || 'Sin respuesta del servidor'}`);
+  }
+  return await res.json();
+}
 
         // ==================== CALCULAR AHORA ====================
         async function calculateNow() {
-            const btn = document.querySelector('button[onclick="calculateNow()"]');
-            const originalText = btn.innerHTML;
-            btn.innerHTML = `CALCULANDO<span class="animate-pulse">...</span>`;
-            btn.disabled = true;
+  const btn = document.querySelector('button[onclick="calculateNow()"]');
+  const originalText = btn.innerHTML;
+  btn.innerHTML = `CALCULANDO<span class="animate-pulse">...</span>`;
+  btn.disabled = true;
 
-            try {
-                const data = await callCalculateRRG();
-                LAST_RESULT = data;
-                renderAll(data);
-                document.getElementById('last-run').innerHTML = `
-                    ÚLTIMA EJECUCIÓN<br>
-                    <span class="text-emerald-400">${data.timestamp}</span>
-                `;
-            } catch (e) {
-                alert('Error al calcular: ' + e.message);
-                console.error(e);
-            }
-
-            btn.innerHTML = originalText;
-            btn.disabled = false;
-        }
+  try {
+    const data = await callCalculateRRG();
+    LAST_RESULT = data;
+    renderAll(data);
+    document.getElementById('last-run').innerHTML = `
+      ÚLTIMA EJECUCIÓN<br>
+      <span class="text-emerald-400">${data.timestamp}</span>
+    `;
+  } catch (e) {
+    console.error('💥 Error completo:', e);
+    alert('❌ Error en el cálculo:\n\n' + e.message + '\n\n(Revisa la consola del navegador para más detalles)');
+  } finally {
+    btn.innerHTML = originalText;
+    btn.disabled = false;
+  }
+}
 
         // ==================== RENDER TODO ====================
         function renderAll(data) {
