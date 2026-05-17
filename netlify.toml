@@ -2,9 +2,6 @@
   publish = "."
   command = "echo 'No build needed'"
 
-[[functions]]
-  pattern = "calculate-rrg"
+[functions]
   memory = 1024
-
-[[functions]]
-  pattern = "auto-rrg"
+  directory = "netlify/functions"
