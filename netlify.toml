@@ -1,6 +1,7 @@
 [build]
   publish = "."
-  command = "echo 'No build needed'"
+  command = "npm ci"
 
 [functions]
   directory = "netlify/functions"
+  timeout = 30          # ←←← esto es lo nuevo (30 segundos)
