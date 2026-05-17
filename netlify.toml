@@ -1,0 +1,10 @@
+[build]
+  publish = "."
+  command = "echo 'No build needed'"
+
+[[functions]]
+  pattern = "calculate-rrg"
+  memory = 1024
+
+[[functions]]
+  pattern = "auto-rrg"
